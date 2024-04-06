@@ -47,16 +47,19 @@ pub fn addMruby(owner: *std.Build, exe: *std.Build.Step.Compile) void {
     const compat_path = path.join(allocator, &.{ src_dir, "src", "mruby_compat.c" }) catch unreachable;
     const package_path = path.join(allocator, &.{ src_dir, "src", "mruby.zig" }) catch unreachable;
 
-    exe.addSystemIncludePath(include_path);
-    exe.addLibraryPath(library_path);
+    exe.addSystemIncludePath(.{ .path = include_path });
+    exe.addLibraryPath(.{ .path = library_path });
     exe.linkSystemLibrary("mruby");
     exe.linkLibC();
-    exe.addCSourceFile(compat_path, &.{});
+    exe.addCSourceFile(.{
+        .file = .{ .path = compat_path },
+        .flags = &.{},
+    });
 
     const mod = owner.createModule(.{
-        .source_file = .{ .path = package_path },
+        .root_source_file = .{ .path = package_path },
     });
-    exe.addModule("mruby", mod);
+    exe.root_module.addImport("mruby", mod);
 
     const build_mruby = owner.addSystemCommand(&[_][]const u8{
         "rake",

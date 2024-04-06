@@ -93,7 +93,7 @@ pub const MrubyAllocator = struct {
     pub fn deinit(self: *Self) void {
         var iter = self.ptr_size_map.iterator();
         while (iter.next()) |entry| {
-            const ptr = @intToPtr([*]u8, entry.key_ptr.*);
+            const ptr: [*]u8 = @ptrFromInt(entry.key_ptr.*);
             const size = entry.value_ptr.*;
             const memory = ptr[0..size];
             self.allocator.free(memory);
@@ -103,30 +103,30 @@ pub const MrubyAllocator = struct {
 
     pub fn alloc(self: *Self, size: usize) ?*anyopaque {
         const new_memory = self.allocator.alloc(u8, size) catch return null;
-        self.ptr_size_map.put(@ptrToInt(new_memory.ptr), new_memory.len) catch return null;
+        self.ptr_size_map.put(@intFromPtr(new_memory.ptr), new_memory.len) catch return null;
         return new_memory.ptr;
     }
 
     pub fn realloc(self: *Self, old_ptr: *anyopaque, new_size: usize) ?*anyopaque {
-        const old_size = self.ptr_size_map.get(@ptrToInt(old_ptr)) orelse return null;
-        const old_memory = @ptrCast([*]u8, old_ptr)[0..old_size];
+        const old_size = self.ptr_size_map.get(@intFromPtr(old_ptr)) orelse return null;
+        const old_memory = @as([*]u8, @ptrCast(old_ptr))[0..old_size];
         const new_memory = self.allocator.realloc(old_memory, new_size) catch return null;
-        _ = self.ptr_size_map.remove(@ptrToInt(old_ptr));
-        self.ptr_size_map.put(@ptrToInt(new_memory.ptr), new_memory.len) catch return null;
+        _ = self.ptr_size_map.remove(@intFromPtr(old_ptr));
+        self.ptr_size_map.put(@intFromPtr(new_memory.ptr), new_memory.len) catch return null;
         return new_memory.ptr;
     }
 
     pub fn free(self: *Self, ptr: *anyopaque) void {
-        const size = self.ptr_size_map.get(@ptrToInt(ptr)) orelse unreachable;
-        const memory = @ptrCast([*]u8, ptr)[0..size];
+        const size = self.ptr_size_map.get(@intFromPtr(ptr)) orelse unreachable;
+        const memory = @as([*]u8, @ptrCast(ptr))[0..size];
         self.allocator.free(memory);
-        _ = self.ptr_size_map.remove(@ptrToInt(ptr));
+        _ = self.ptr_size_map.remove(@intFromPtr(ptr));
     }
 };
 
 export fn zigMrubyAlloc(mrb: *mrb_state, ptr: ?*anyopaque, size: usize, user_data: ?*anyopaque) ?*anyopaque {
     _ = mrb;
-    const zig_mruby_alloc = @ptrCast(*MrubyAllocator, @alignCast(@alignOf(MrubyAllocator), user_data));
+    const zig_mruby_alloc: *MrubyAllocator = @ptrCast(@alignCast(user_data));
     if (ptr == null and size == 0) {
         return null;
     } else if (ptr == null) {
@@ -1011,7 +1011,7 @@ pub const mrb_state = opaque {
     }
 
     pub fn str_new(self: *Self, str: []const u8) mrb_value {
-        return mrb_str_new(self, str.ptr, @intCast(mrb_int, str.len));
+        return mrb_str_new(self, str.ptr, @as(mrb_int, @intCast(str.len)));
     }
 
     /// Turns a C string into a Ruby string value.
@@ -1019,17 +1019,17 @@ pub const mrb_state = opaque {
         return mrb_str_new_cstr(self, str);
     }
     pub fn str_new_static(self: *Self, str: []const u8) mrb_value {
-        return mrb_str_new_static(self, str.ptr, @intCast(mrb_int, str.len));
+        return mrb_str_new_static(self, str.ptr, @as(mrb_int, @intCast(str.len)));
     }
     pub fn str_new_lit(self: *Self, lit: []const u8) mrb_value {
-        return mrb_str_new_static(self, lit.ptr, @intCast(mrb_int, lit.len));
+        return mrb_str_new_static(self, lit.ptr, @as(mrb_int, @intCast(lit.len)));
     }
 
     pub fn obj_freeze(self: *Self, value: mrb_value) mrb_value {
         return mrb_obj_freeze(self, value);
     }
     pub fn str_new_frozen(self: *Self, str: []const u8) mrb_value {
-        const value = mrb_str_new(self, str.ptr, @intCast(mrb_int, str.len));
+        const value = mrb_str_new(self, str.ptr, @as(mrb_int, @intCast(str.len)));
         return mrb_obj_freeze(self, value);
     }
     pub fn str_new_cstr_frozen(self: *Self, str: [*:0]const u8) mrb_value {
@@ -1037,7 +1037,7 @@ pub const mrb_state = opaque {
         return mrb_obj_freeze(self, value);
     }
     pub fn str_new_static_frozen(self: *Self, str: []const u8) mrb_value {
-        const value = mrb_str_new_static(self, str.ptr, @intCast(mrb_int, str.len));
+        const value = mrb_str_new_static(self, str.ptr, @as(mrb_int, @intCast(str.len)));
         return mrb_obj_freeze(self, value);
     }
     pub fn str_new_lit_frozen(self: *Self, lit: []const u8) mrb_value {
@@ -1164,7 +1164,7 @@ pub const mrb_state = opaque {
     }
 
     pub fn exc_new(self: *Self, cla: *RClass, str: []const u8) mrb_value {
-        return mrb_exc_new(self, cla, str.ptr, @intCast(mrb_int, str.len));
+        return mrb_exc_new(self, cla, str.ptr, @as(mrb_int, @intCast(str.len)));
     }
     pub fn exc_raise(self: *Self, exception: mrb_value) mrb_noreturn {
         return mrb_exc_raise(self, exception);
@@ -1328,9 +1328,10 @@ pub const mrb_state = opaque {
         return mrb_show_copyright(self);
     }
 
-    pub fn format(self: *Self, fmt: [*:0]const u8, args: anytype) mrb_value {
-        return @call(.auto, mrb_format, .{ self, fmt } ++ args);
-    }
+    // NOTE: Not sure why this breaks things in 3.3
+    // pub fn format(self: *Self, fmt: [*:0]const u8, args: anytype) mrb_value {
+    //     return @call(.auto, mrb_format, .{ self, fmt } ++ args);
+    // }
 
     // mruby/array.h
 
@@ -2226,87 +2227,87 @@ pub const mrb_value = extern struct { // HACK: assume word boxing for now
     }
 
     pub fn rbasic(self: Self) !*RBasic {
-        return @ptrCast(*RBasic, try self.ptr());
+        return @as(*RBasic, @ptrCast(try self.ptr()));
     }
     pub fn rfloat(self: Self) !*RFloat {
         if (!self.float_p())
             return error.ConversionError;
-        return @ptrCast(*RFloat, try self.ptr());
+        return @as(*RFloat, @ptrCast(try self.ptr()));
     }
     pub fn rdata(self: Self) !*RData {
         if (!self.data_p())
             return error.ConversionError;
-        return @ptrCast(*RData, try self.ptr());
+        return @as(*RData, @ptrCast(try self.ptr()));
     }
     pub fn rinteger(self: Self) !*RInteger {
         if (!self.integer_p())
             return error.ConversionError;
-        return @ptrCast(*RInteger, try self.ptr());
+        return @as(*RInteger, @ptrCast(try self.ptr()));
     }
     pub fn rcptr(self: Self) !*RCptr {
         if (!self.cptr_p())
             return error.ConversionError;
-        return @ptrCast(*RCptr, try self.ptr());
+        return @as(*RCptr, @ptrCast(try self.ptr()));
     }
     pub fn robject(self: Self) !*RObject {
         if (!self.object_p())
             return error.ConversionError;
-        return @ptrCast(*RObject, try self.ptr());
+        return @as(*RObject, @ptrCast(try self.ptr()));
     }
     pub fn rclass(self: Self) !*RClass {
         if (!self.class_p())
             return error.ConversionError;
-        return @ptrCast(*RClass, try self.ptr());
+        return @as(*RClass, @ptrCast(try self.ptr()));
     }
     pub fn rproc(self: Self) !*RProc {
         if (!self.proc_p())
             return error.ConversionError;
-        return @ptrCast(*RProc, try self.ptr());
+        return @as(*RProc, @ptrCast(try self.ptr()));
     }
     pub fn rarray(self: Self) !*RArray {
         if (!self.array_p())
             return error.ConversionError;
-        return @ptrCast(*RArray, try self.ptr());
+        return @as(*RArray, @ptrCast(try self.ptr()));
     }
     pub fn rhash(self: Self) !*RHash {
         if (!self.hash_p())
             return error.ConversionError;
-        return @ptrCast(*RHash, try self.ptr());
+        return @as(*RHash, @ptrCast(try self.ptr()));
     }
     pub fn rstring(self: Self) !*RString {
         if (!self.string_p())
             return error.ConversionError;
-        return @ptrCast(*RString, try self.ptr());
+        return @as(*RString, @ptrCast(try self.ptr()));
     }
     pub fn rrange(self: Self) !*RRange {
         if (!self.range_p())
             return error.ConversionError;
-        return @ptrCast(*RRange, try self.ptr());
+        return @as(*RRange, @ptrCast(try self.ptr()));
     }
     pub fn rexception(self: Self) !*RException {
         if (!self.exception_p())
             return error.ConversionError;
-        return @ptrCast(*RException, try self.ptr());
+        return @as(*RException, @ptrCast(try self.ptr()));
     }
     pub fn renv(self: Self) !*REnv {
         if (!self.range_p())
             return error.ConversionError;
-        return @ptrCast(*REnv, try self.ptr());
+        return @as(*REnv, @ptrCast(try self.ptr()));
     }
     pub fn rfiber(self: Self) !*RFiber {
         if (!self.fiber_p())
             return error.ConversionError;
-        return @ptrCast(*RFiber, try self.ptr());
+        return @as(*RFiber, @ptrCast(try self.ptr()));
     }
     pub fn ristruct(self: Self) !*RIStruct {
         if (!self.istruct_p())
             return error.ConversionError;
-        return @ptrCast(*RIStruct, try self.ptr());
+        return @as(*RIStruct, @ptrCast(try self.ptr()));
     }
     pub fn rbreak(self: Self) !*RBreak {
         if (!self.break_p())
             return error.ConversionError;
-        return @ptrCast(*RBreak, try self.ptr());
+        return @as(*RBreak, @ptrCast(try self.ptr()));
     }
     // TODO: RComplex is part of a gem and not properly supported for now
     pub fn rcomplex(_: Self) !*RComplex {
@@ -3195,7 +3196,7 @@ pub const mruby_func_args = struct {
         val |= mrb_args_opt(self.opt);
         val |= if (self.rest) mrb_args_rest() else 0;
         val |= mrb_args_post(self.post);
-        val |= mrb_args_key(self.keys, @boolToInt(self.kdict));
+        val |= mrb_args_key(self.keys, @intFromBool(self.kdict));
         val |= if (self.block) mrb_args_block() else 0;
         return val;
     }
@@ -3533,7 +3534,7 @@ pub extern fn mrb_str_new(mrb: *mrb_state, p: [*]const u8, len: mrb_int) mrb_val
 pub extern fn mrb_str_new_cstr(mrb: *mrb_state, str: [*:0]const u8) mrb_value;
 pub extern fn mrb_str_new_static(mrb: *mrb_state, ptr: [*]const u8, len: mrb_int) mrb_value;
 pub fn mrb_str_new_lit(mrb: *mrb_state, lit: []const u8) mrb_value {
-    return mrb_str_new_static(mrb, lit.ptr, @intCast(mrb_int, lit.len));
+    return mrb_str_new_static(mrb, lit.ptr, @as(mrb_int, @intCast(lit.len)));
 }
 
 pub extern fn mrb_utf8_from_locale1(p: [*]const u8, l: usize) ?[*:0]const u8;
@@ -3755,7 +3756,8 @@ pub extern fn mrb_state_atexit(mrb: *mrb_state, func: mrb_atexit_func) void;
 pub extern fn mrb_show_version(mrb: *mrb_state) void;
 pub extern fn mrb_show_copyright(mrb: *mrb_state) void;
 
-pub extern fn mrb_format(mrb: *mrb_state, format: [*:0]const u8, ...) mrb_value;
+// NOTE: Not sure why this breaks things in 3.3
+// pub extern fn mrb_format(mrb: *mrb_state, format: [*:0]const u8, ...) mrb_value;
 
 /////////////////////////////////////////
 //            mruby/array.h            //
@@ -4217,7 +4219,7 @@ pub extern fn mrb_data_check_get_ptr(mrb: *mrb_state, value: mrb_value, data_typ
 /// Define data pointer and data type of existing RData object
 pub extern fn mrb_data_init1(value: mrb_value, data_ptr: *anyopaque, data_type: *mrb_data_type) void;
 pub fn mrb_rdata(obj: mrb_value) ?*RData {
-    return @ptrCast(*RData, mrb_get_ptr(obj));
+    return @as(*RData, @ptrCast(mrb_get_ptr(obj)));
 }
 pub extern fn mrb_rdata_data(data: *RData) ?*anyopaque;
 pub extern fn mrb_rdata_type(data: *RData) ?*const mrb_data_type;

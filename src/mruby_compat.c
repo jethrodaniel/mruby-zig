@@ -315,29 +315,6 @@ mrb_value mrb_get_undef_value(void) {
 }
 
 /*
- * mruby/error.h
- */
-
-mrb_value mrb_break_value_get1(struct RBreak *brk) {
-    return mrb_break_value_get(brk);
-}
-void mrb_break_value_set1(struct RBreak *brk, mrb_value val) {
-    mrb_break_value_set(brk, val);
-}
-const struct RProc *mrb_break_proc_get1(struct RBreak *brk) {
-    return mrb_break_proc_get(brk);
-}
-void mrb_break_proc_set1(struct RBreak *brk, struct RProc *proc) {
-    mrb_break_proc_set(brk, proc);
-}
-uint32_t mrb_break_tag_get(struct RBreak *brk) {
-    return mrb_break_tag_get(brk);
-}
-void mrb_break_tag_set(struct RBreak *brk, uint32_t tag) {
-    return mrb_break_tag_set(brk, tag);
-}
-
-/*
  * mruby/object.h
  */
 
